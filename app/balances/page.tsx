@@ -198,6 +198,9 @@ export default function BalancesPage() {
   const totalTripSpent = balances.reduce((sum, b) => sum + b.totalPaid, 0);
   const equalShare = members.length > 0 ? totalTripSpent / members.length : 0;
 
+  // Settle-up transfers filter state
+  const [showAllTransfers, setShowAllTransfers] = useState(false);
+
   // Active user's balance profile
   const activeUserBalance = currentUser
     ? balances.find((b) => b.memberId === currentUser._id)
@@ -208,6 +211,15 @@ export default function BalancesPage() {
 
   const totalIReceive = myOwedBy.reduce((sum, item) => sum + item.amount, 0);
   const totalIOwe = myOwesTo.reduce((sum, item) => sum + item.amount, 0);
+
+  // Transfers specific to current user
+  const myPairwiseDebts = currentUser
+    ? pairwiseDebts.filter((d) => d.fromId === currentUser._id || d.toId === currentUser._id)
+    : pairwiseDebts;
+
+  const displayedDebts = currentUser && !showAllTransfers
+    ? myPairwiseDebts
+    : pairwiseDebts;
 
   // Relevant settlement history for active user
   const myHistory = currentUser
@@ -564,60 +576,121 @@ export default function BalancesPage() {
             )}
 
             {/* ======================================================== */}
-            {/* TAB 2: SETTLE-UP TRANSFERS ONLY (PAIRWISE DIRECT DEBTS) */}
+            {/* TAB 2: SETTLE-UP TRANSFERS (USER-SPECIFIC BY DEFAULT) */}
             {/* ======================================================== */}
             {viewMode === 'transfers' && (
               <div className="space-y-4">
                 <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                      <span>🔄</span> Direct Settle-Up Transfers
-                    </h2>
-                    <span className="text-[11px] text-indigo-300 bg-indigo-500/15 px-2.5 py-0.5 rounded-full border border-indigo-500/30 font-bold">
-                      {pairwiseDebts.length} pending
-                    </span>
-                  </div>
-                  <p className="text-slate-400 text-xs mb-4">
-                    Direct 1-to-1 transfer amounts between each pair of friends to settle all trip debts.
-                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                        <span>🔄</span> {currentUser ? `${currentUser.name}'s Settle-Up Transfers` : 'Direct Settle-Up Transfers'}
+                      </h2>
+                      <p className="text-slate-400 text-xs mt-0.5">
+                        {currentUser
+                          ? `Showing only transfers involving ${currentUser.name}.`
+                          : 'Direct 1-to-1 transfer amounts between friends.'}
+                      </p>
+                    </div>
 
-                  {pairwiseDebts.length === 0 ? (
+                    {currentUser && (
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto bg-slate-950 p-1 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setShowAllTransfers(false)}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            !showAllTransfers
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          Only {currentUser.name} ({myPairwiseDebts.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAllTransfers(true)}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            showAllTransfers
+                              ? 'bg-indigo-600 text-white shadow-md'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          All Friends ({pairwiseDebts.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {displayedDebts.length === 0 ? (
                     <div className="text-center py-10 bg-emerald-950/20 rounded-2xl border border-emerald-500/20">
                       <div className="text-4xl mb-2">🎉</div>
-                      <p className="text-emerald-300 font-bold text-base">All Debts Settled!</p>
-                      <p className="text-slate-400 text-xs mt-1">Everyone in the crew is squared away.</p>
+                      <p className="text-emerald-300 font-bold text-base">
+                        {currentUser && !showAllTransfers
+                          ? `${currentUser.name} is all settled up!`
+                          : 'All debts in the group are settled!'}
+                      </p>
+                      <p className="text-slate-400 text-xs mt-1">No pending transfers needed.</p>
                     </div>
                   ) : (
                     <div className="space-y-2.5">
-                      {pairwiseDebts.map((d, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between bg-slate-950/70 border border-slate-800 hover:border-indigo-500/40 p-4 rounded-2xl transition-all"
-                        >
-                          <div className="flex items-center gap-2.5 text-xs sm:text-sm">
-                            <span className="font-bold text-rose-300 bg-rose-950/50 px-2.5 py-1 rounded-lg border border-rose-500/20">
-                              {d.fromName}
-                            </span>
-                            <span className="text-slate-400 font-medium text-xs">pays</span>
-                            <span className="font-bold text-emerald-300 bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                              {d.toName}
-                            </span>
+                      {displayedDebts.map((d, idx) => {
+                        const isReceiver = currentUser?._id === d.toId;
+                        const isPayer = currentUser?._id === d.fromId;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border transition-all ${
+                              isReceiver
+                                ? 'bg-emerald-950/25 border-emerald-500/30 hover:border-emerald-500/50'
+                                : isPayer
+                                ? 'bg-rose-950/25 border-rose-500/30 hover:border-rose-500/50'
+                                : 'bg-slate-950/70 border-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
+                              <span
+                                className={`font-bold px-2.5 py-1 rounded-lg border truncate ${
+                                  isPayer
+                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                    : 'bg-slate-900 text-slate-200 border-slate-700'
+                                }`}
+                              >
+                                {d.fromName} {isPayer ? '(You)' : ''}
+                              </span>
+                              <span className="text-slate-500 font-medium text-xs shrink-0">pays</span>
+                              <span
+                                className={`font-bold px-2.5 py-1 rounded-lg border truncate ${
+                                  isReceiver
+                                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                    : 'bg-slate-900 text-slate-200 border-slate-700'
+                                }`}
+                              >
+                                {d.toName} {isReceiver ? '(You)' : ''}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-sm sm:text-base font-black text-white bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-700">
+                                ₹{d.amount.toFixed(2)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openCustomPaymentModal(d.fromId, d.toId, d.amount)}
+                                className={`text-xs font-bold px-3 py-1.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1 ${
+                                  isReceiver
+                                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 border border-emerald-400/30'
+                                    : isPayer
+                                    ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30 border border-rose-400/30'
+                                    : 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30'
+                                }`}
+                              >
+                                {isReceiver ? '✓ Received' : isPayer ? '💸 I Paid' : 'Settle'}
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm sm:text-base font-black text-white bg-indigo-950/60 border border-indigo-500/40 px-3.5 py-1.5 rounded-xl">
-                              ₹{d.amount.toFixed(2)}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => openCustomPaymentModal(d.fromId, d.toId, d.amount)}
-                              className="bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 text-white text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-indigo-400/30 transition-all"
-                              title="Record this payment"
-                            >
-                              Settle
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
