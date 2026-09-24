@@ -18,20 +18,21 @@ let globalWithMongo = global as typeof globalThis & {
 export async function getMongoClient(): Promise<MongoClient> {
   const uri = getUri();
 
-  if (process.env.NODE_ENV === 'development') {
-    if (!globalWithMongo._mongoClientPromise) {
-      const client = new MongoClient(uri);
-      globalWithMongo._mongoClientPromise = client.connect().catch((err) => {
-        // Clear cached promise on error so subsequent requests retry
-        delete globalWithMongo._mongoClientPromise;
-        throw err;
-      });
-    }
-    return globalWithMongo._mongoClientPromise;
+  if (!globalWithMongo._mongoClientPromise) {
+    const client = new MongoClient(uri, {
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
+    globalWithMongo._mongoClientPromise = client.connect().catch((err) => {
+      delete globalWithMongo._mongoClientPromise;
+      throw err;
+    });
   }
 
-  const client = new MongoClient(uri);
-  return client.connect();
+  return globalWithMongo._mongoClientPromise;
 }
 
 export async function getDb(): Promise<Db> {
